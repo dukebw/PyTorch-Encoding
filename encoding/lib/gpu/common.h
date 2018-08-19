@@ -7,7 +7,7 @@ static const unsigned WARP_SIZE = 32;
 static const unsigned MAX_BLOCK_SIZE = 512U;
 
 template<typename In, typename Out>
-struct ScalarConvert {
+struct ScalarConverter {
   static __host__ __device__ __forceinline__ Out to(const In v) { return (Out) v; }
 };
 
@@ -60,9 +60,9 @@ template <typename DType, typename Acctype>
 struct Float2 {
   Acctype v1, v2;
   __device__ Float2() {}
-  __device__ Float2(DType v1, DType v2) : v1(ScalarConvert<DType, Acctype>::to(v1)), v2(ScalarConvert<DType, Acctype>::to(v2)) {}
-  __device__ Float2(DType v) : v1(ScalarConvert<DType, Acctype>::to(v)), v2(ScalarConvert<DType, Acctype>::to(v)) {}
-  __device__ Float2(int v) : v1(ScalarConvert<int, Acctype>::to(v)), v2(ScalarConvert<int, Acctype>::to(v)) {}
+  __device__ Float2(DType v1, DType v2) : v1(ScalarConverter<DType, Acctype>::to(v1)), v2(ScalarConverter<DType, Acctype>::to(v2)) {}
+  __device__ Float2(DType v) : v1(ScalarConverter<DType, Acctype>::to(v)), v2(ScalarConverter<DType, Acctype>::to(v)) {}
+  __device__ Float2(int v) : v1(ScalarConverter<int, Acctype>::to(v)), v2(ScalarConverter<int, Acctype>::to(v)) {}
   __device__ Float2& operator+=(const Float2& a) {
     v1 += a.v1;
     v2 += a.v2;

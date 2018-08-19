@@ -1,4 +1,6 @@
-#include <ATen/ATen.h>
+#include "ATen/ATen.h"
+#include "ATen/cuda/CUDAContext.h"
+#include "ATen/cuda/CUDAApplyUtils.cuh"
 #include <vector>
 
 #include "common.h"
@@ -12,7 +14,7 @@ struct AggOp {
                    DeviceTensor<DType, 3> x,
                    DeviceTensor<DType, 2> c) : A(a), X(x), C(c) {}
   __device__ __forceinline__ Acctype operator()(int b, int i, int k, int d) {
-    return ScalarConvert<DType, Acctype>::to(A[b][i][k] * (X[b][i][d] - C[k][d]));
+    return ScalarConverter<DType, Acctype>::to(A[b][i][k] * (X[b][i][d] - C[k][d]));
   }
   DeviceTensor<DType, 3> A;
   DeviceTensor<DType, 3> X;
@@ -25,7 +27,7 @@ struct AggBackOp {
                        DeviceTensor<DType, 3> x,
                        DeviceTensor<DType, 2> c) : G(g), X(x), C(c) {}
   __device__ __forceinline__ Acctype operator()(int b, int i, int k, int d) {
-    return ScalarConvert<DType, Acctype>::to(G[b][k][d] * (X[b][i][d] - C[k][d]));
+    return ScalarConverter<DType, Acctype>::to(G[b][k][d] * (X[b][i][d] - C[k][d]));
   }
   DeviceTensor<DType, 3> G;
   DeviceTensor<DType, 3> X;
@@ -39,7 +41,7 @@ struct SL2Op {
   __device__ __forceinline__ Acctype operator()(int b, int i, int k, int d) 
   {
       DType r = X[b][i][d] - C[k][d];
-      return ScalarConvert<DType, Acctype>::to(r * r);
+      return ScalarConverter<DType, Acctype>::to(r * r);
   }
   DeviceTensor<DType, 3> X;
   DeviceTensor<DType, 2> C;
@@ -55,7 +57,7 @@ struct SL2GradXOp {
   ) : GSL(gsl), X(x), C(c), S(s) {}
   __device__ __forceinline__ Acctype operator()(int b, int i, int k, int d) 
   {
-    return ScalarConvert<DType, Acctype>::to(
+    return ScalarConverter<DType, Acctype>::to(
       2 * S[k] * GSL[b][i][k] * (X[b][i][d]-C[k][d]));
   }
   DeviceTensor<DType, 3> GSL;
@@ -312,7 +314,7 @@ at::Tensor Aggregate_Forward_CUDA(
     const at::Tensor C_) {
   /* Device tensors */
   auto E_ = A_.type().tensor({A_.size(0), C_.size(0), C_.size(1)}).zero_(); 
-  cudaStream_t stream = at::globalContext().getCurrentCUDAStream();
+  cudaStream_t stream = at::cuda::getCurrentCUDAStream();
   // B, K, D
   dim3 blocks(C_.size(1), C_.size(0), X_.size(0));
   dim3 threads(getNumThreads(X_.size(1)));
@@ -338,7 +340,7 @@ std::vector<at::Tensor> Aggregate_Backward_CUDA(
   auto gradA_ = at::zeros_like(A_);
   auto gradX_ = at::bmm(A_, GE_);
   auto gradC_ = (-GE_ * A_.sum(1).unsqueeze(2)).sum(0);
-  cudaStream_t stream = at::globalContext().getCurrentCUDAStream();
+  cudaStream_t stream = at::cuda::getCurrentCUDAStream();
   // B, K, D
   dim3 blocks(C_.size(0), X_.size(1), X_.size(0));
   dim3 threads(getNumThreads(C_.size(1)));
@@ -361,7 +363,7 @@ at::Tensor ScaledL2_Forward_CUDA(
     const at::Tensor C_,
     const at::Tensor S_) {
   auto SL_ = X_.type().tensor({X_.size(0), X_.size(1), C_.size(0)}).zero_();
-  cudaStream_t stream = at::globalContext().getCurrentCUDAStream();
+  cudaStream_t stream = at::cuda::getCurrentCUDAStream();
   dim3 blocks(C_.size(0), X_.size(1), X_.size(0));
   dim3 threads(getNumThreads(C_.size(1)));
 
@@ -388,7 +390,7 @@ std::vector<at::Tensor> ScaledL2_Backward_CUDA(
   auto GX_ = at::zeros_like(X_);
   auto GC_ = at::zeros_like(C_);
   /* kernel function */
-  cudaStream_t stream = at::globalContext().getCurrentCUDAStream();
+  cudaStream_t stream = at::cuda::getCurrentCUDAStream();
   dim3 blocks1(X_.size(2), X_.size(1), X_.size(0));
   dim3 threads1(getNumThreads(C_.size(0)));
   dim3 blocks2(C_.size(1), C_.size(0));
